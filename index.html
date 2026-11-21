@@ -923,7 +923,7 @@ function drawEngraveLine(ctx, e, cx, cy, maxW){
 function drawUnrolledMapBox(ctx, bx, by, bw, bh){
   const L = mapLayout(), D = L.D, m = buildMap();
   const shift = D.bot.y0 - D.top.y1;                         /* 兩戒之間的接縫高度,展開時去掉 */
-  const vy = y => y <= D.top.y1 + 1e-6 ? y : y - shift;      /* 實際位置 → 連續的展開位置 */
+  const vy = y => y <= D.top.y1 ? y : (y >= D.bot.y0 ? y - shift : D.top.y1);      /* 實際位置 → 連續的展開位置 */
   const yTop = D.top.y0, yBot = D.bot.y1 - shift, top0 = D.top.y0 + 0.05;
   ctx.save();
   roundRectPath(ctx,bx,by,bw,bh,10); ctx.clip();
