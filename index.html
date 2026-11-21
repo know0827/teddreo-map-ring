@@ -207,10 +207,6 @@ button.act:disabled{opacity:0.6;cursor:wait;}
       <div><div class="t-name">航線</div><div class="t-desc">兩組主石之間刻兩條平行航線,各有一架小飛機(一去一回)</div></div>
       <div class="switch" id="routeSwitch" role="switch" tabindex="0" onclick="toggleRoute()"></div>
     </div>
-    <div class="toggle-row" id="mapRouteRow" style="margin-top:10px;">
-      <div><div class="t-name">設計圖展開圖顯示航線</div><div class="t-desc">下載的設計圖中,展開圖上是否畫出航線(關閉則只顯示國土輪廓與主石,方便刻印)</div></div>
-      <div class="switch" id="mapRouteSwitch" role="switch" tabindex="0" onclick="toggleMapRoute()"></div>
-    </div>
     <div class="next-step-row"><button class="next-step" onclick="goNext('place')">下一步:主石</button></div>
     </div>
   </div>
@@ -425,7 +421,7 @@ const FINISHES = [
 ];
 const finishName = ()=> FINISHES.find(f=>f.key===st.finish).name;
 const newEng = ()=>({on:false, text:'', color:'silver', font:'specialelite'});
-let st = {placeA:'TW', placeB:'US', route:true, mapRoute:true,
+let st = {placeA:'TW', placeB:'US', route:true,
   stoneCount:1, gemA1:'diamondwhite', gemA2:'royalblue', gemB1:'olivegreen', gemB2:'royalblue',
   widthTop:4, widthBot:4, finish:'matte',
   eng:{top:newEng(), bot:newEng()},
@@ -441,12 +437,9 @@ function renderPlace(){
   document.getElementById('placeASel').innerHTML = countryOptionsHTML(st.placeA);
   document.getElementById('placeBSel').innerHTML = countryOptionsHTML(st.placeB);
   document.getElementById('routeSwitch').classList.toggle('on', st.route);
-  document.getElementById('mapRouteSwitch').classList.toggle('on', st.mapRoute);
-  document.getElementById('mapRouteRow').style.display = st.route ? '' : 'none';
   drawMapPick();
 }
 function setPlace(f, k){ st[f]=k; renderPlace(); renderGemPicker(); update(true); }
-function toggleMapRoute(){ st.mapRoute=!st.mapRoute; renderPlace(); }
 function toggleRoute(){ st.route=!st.route; renderPlace(); update(false); }
 
 /* ---- 麥卡托投影(形狀不變形) ---- */
@@ -926,74 +919,78 @@ function drawEngraveLine(ctx, e, cx, cy, maxW){
   chs.forEach((c,i)=>{ ctx.font = engraveFontOf(fs0, c, fam0); ctx.fillText(c, x0, cy); x0 += w0[i]+gap0; });
   ctx.textAlign='center';
 }
-/* 「下載我的設計圖」右欄刻字框下方:兩枚戒指的展開圖(上戒、下戒連成一整片,沒有空隙) */
+/* 「下載我的設計圖」右欄刻字框下方:兩枚戒指的展開圖(上戒、下戒連成一整片;兩國靠近、航線連續不斷開) */
 function drawUnrolledMapBox(ctx, bx, by, bw, bh){
   const L = mapLayout(), D = L.D, m = buildMap();
   const shift = D.bot.y0 - D.top.y1;                         /* 兩戒之間的接縫高度,展開時去掉 */
-  const vy = y => y <= D.top.y1 ? y : (y >= D.bot.y0 ? y - shift : D.top.y1);      /* 實際位置 → 連續的展開位置 */
+  const vy = y => y <= D.top.y1 ? y : (y >= D.bot.y0 ? y - shift : D.top.y1);
   const yTop = D.top.y0, yBot = D.bot.y1 - shift, top0 = D.top.y0 + 0.05;
   ctx.save();
   const outT = ctx.getTransform();
   roundRectPath(ctx,bx,by,bw,bh,10); ctx.clip();
   ctx.fillStyle='#d9dadc'; ctx.fillRect(bx,by,bw,bh);
-  /* 只取兩個國家所在的橫向範圍,放到最大 */
+  /* 兩個國家互相靠近(只影響展開圖),航線才能連起來 */
+  const sh = L.shapes.map(P=>({P, ox:P.vpt([0,0]).x, w:P.f.w, dx:0}));
+  const left = sh[0].ox <= sh[1].ox ? sh[0] : sh[1], right = left===sh[0] ? sh[1] : sh[0];
+  const GAP_TARGET = 1.3, curGap = right.ox - (left.ox + left.w);
+  if(curGap > GAP_TARGET){ const d=(curGap-GAP_TARGET)/2; left.dx=d; right.dx=-d; }
+  const dxOf = k => sh[k==='A'?0:1].dx;
+  const spots = m.spots.map(sp=>({slot:sp.slot, x:sp.x + dxOf(sp.slot.charAt(3)), y:vy(sp.y)}));
+  const sA = L.spot('A'), sB = L.spot('B');
+  const A = {x:sA.x + dxOf('A'), y:vy(sA.y)}, B = {x:sB.x + dxOf('B'), y:vy(sB.y)};
   let x0=1e9, x1=-1e9;
-  L.shapes.forEach(P=>{ const a=P.vpt([0,0]).x; x0=Math.min(x0,a); x1=Math.max(x1,a+P.f.w); });
-  m.spots.forEach(sp=>{ x0=Math.min(x0,sp.x-GEM_R*1.4); x1=Math.max(x1,sp.x+GEM_R*1.4); });
+  sh.forEach(o=>{ x0=Math.min(x0,o.ox+o.dx); x1=Math.max(x1,o.ox+o.dx+o.w); });
+  spots.forEach(sp=>{ x0=Math.min(x0,sp.x-GEM_R*1.4); x1=Math.max(x1,sp.x+GEM_R*1.4); });
   x0-=0.3; x1+=0.3;
   const k = Math.min(bw/(x1-x0), bh/(yBot-yTop));
   ctx.translate(bx+(bw-(x1-x0)*k)/2 - x0*k, by+(bh-(yBot-yTop)*k)/2 - yTop*k);
   ctx.scale(k,k);
   const px = 1/k;
   const land = new Path2D();
-  L.shapes.forEach(P=>{ P.f.sh.rings.forEach(r=>{ r.forEach((q,i)=>{ const v=P.vpt(q); i ? land.lineTo(v.x, top0+v.v) : land.moveTo(v.x, top0+v.v); }); land.closePath(); }); });
+  sh.forEach(o=>{ o.P.f.sh.rings.forEach(r=>{ r.forEach((q,i)=>{ const v=o.P.vpt(q); i ? land.lineTo(v.x+o.dx, top0+v.v) : land.moveTo(v.x+o.dx, top0+v.v); }); land.closePath(); }); });
   /* 浮雕:下緣陰影 → 本體 → 上緣亮邊 → 細輪廓 */
   const off = 3.2*px;
   ctx.save(); ctx.translate(0, off); ctx.fillStyle='#5d5f63'; ctx.fill(land,'evenodd'); ctx.restore();
   ctx.fillStyle='#bdbec1'; ctx.fill(land,'evenodd');
   ctx.save(); ctx.clip(land,'evenodd'); ctx.translate(0,-1.2*px); ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=2*px; ctx.stroke(land); ctx.restore();
   ctx.strokeStyle='rgba(70,72,76,0.75)'; ctx.lineWidth=1*px; ctx.lineJoin='round'; ctx.stroke(land);
-  /* 航線與飛機:與 3D 戒指上的畫法完全相同(線條、飛機、飛機周圍留白),上下戒各自裁切後接在一起 */
-  if(st.route && st.mapRoute && (m.routes||[]).length){
-    const Q = 4, tc = document.createElement('canvas');
-    tc.width = Math.ceil(bw*Q); tc.height = Math.ceil(bh*Q);
-    const tx = tc.getContext('2d');
-    const sc = Q*k;
-    RINGS.forEach(r=>{
-      const R = D[r], dy = r==='top' ? 0 : -shift;
-      tx.save();
+  /* 航線:畫法與 3D 戒指上相同(兩條杏仁形平行線、各一架飛機、飛機周圍留白),但連續不斷開 */
+  if(st.route){
+    const dir = Math.sign(B.x - A.x) || 1;
+    const half = st.stoneCount===2 ? GEM_R*1.12 + GEM_R : GEM_R, pad = half + GEM_R*0.35;
+    const rx0 = A.x + dir*pad, rx1 = B.x - dir*pad;
+    if((rx1-rx0)*dir > 0.8){
+      const sep = GEM_R*2*0.7, mkR = (side, fwd, tp)=>{
+        const e = side*sep*0.12, kk = side*sep*0.85;
+        const at = t => [rx0+(rx1-rx0)*t, A.y+(B.y-A.y)*t + e + kk*4*t*(1-t)];
+        return {at, fwd, tp, tan: t=>{ const p=at(Math.max(0,t-0.01)), q=at(Math.min(1,t+0.01)); return Math.atan2(q[1]-p[1], q[0]-p[0]); }};
+      };
+      const rts = [mkR(-1,false,0.72), mkR(1,true,0.45)];
+      const Q = 4, tc = document.createElement('canvas');
+      tc.width = Math.ceil(bw*Q); tc.height = Math.ceil(bh*Q);
+      const tx = tc.getContext('2d'), sc = Q*k;
       tx.setTransform(sc,0,0,sc, Q*(bw-(x1-x0)*k)/2 - x0*sc, Q*(bh-(yBot-yTop)*k)/2 - yTop*sc);
-      tx.translate(0, dy);
-      tx.beginPath(); tx.rect(x0-5, R.y0, (x1-x0)+10, R.y1-R.y0); tx.clip();
-      m.routes.forEach(rt=>{
+      rts.forEach(rt=>{
         const ink = '#6f7276';
         tx.strokeStyle = ink; tx.lineWidth = 0.032; tx.lineCap='round';
-        tx.beginPath();
-        for(let i=0;i<=120;i++){ const [x,y]=rt.at(i/120); i ? tx.lineTo(x,y) : tx.moveTo(x,y); }
-        tx.stroke();
-        const [ppx,ppy] = rt.at(rt.tp);
-        let ang = rt.tan(rt.tp); if(!rt.fwd) ang += Math.PI;
-        tx.save(); tx.globalCompositeOperation='destination-out';
-        planeShape(tx, ppx, ppy, ang, PLANE_SIZE*1.25); tx.restore();
-        tx.fillStyle = ink;
-        planeShape(tx, ppx, ppy, ang, PLANE_SIZE);
+        tx.beginPath(); for(let i=0;i<=120;i++){ const [x,y]=rt.at(i/120); i ? tx.lineTo(x,y) : tx.moveTo(x,y); } tx.stroke();
+        const [ppx,ppy] = rt.at(rt.tp); let ang = rt.tan(rt.tp); if(!rt.fwd) ang += Math.PI;
+        tx.save(); tx.globalCompositeOperation='destination-out'; planeShape(tx, ppx, ppy, ang, PLANE_SIZE*1.25); tx.restore();
+        tx.fillStyle = ink; planeShape(tx, ppx, ppy, ang, PLANE_SIZE);
       });
-      tx.restore();
-    });
-    ctx.save(); ctx.setTransform(outT);
-    ctx.drawImage(tc, 0, 0, tc.width, tc.height, bx, by, bw, bh);
-    ctx.restore();
+      ctx.save(); ctx.setTransform(outT); ctx.drawImage(tc, 0, 0, tc.width, tc.height, bx, by, bw, bh); ctx.restore();
+    }
   }
   /* 主石:實拍寶石照片 + 銀色邊框 */
-  m.spots.forEach(sp=>{
-    const gem = GEMS.find(g=>g.key===st[sp.slot]), y = vy(sp.y);
+  spots.forEach(sp=>{
+    const gem = GEMS.find(g=>g.key===st[sp.slot]);
     const t = gem && gemTexCache[gem.key], img = t && t.image;
-    ctx.save(); ctx.beginPath(); ctx.arc(sp.x, y, GEM_R, 0, Math.PI*2); ctx.clip();
-    if(img && img.width){ const cw=img.width*0.74, ch=img.height*0.74; ctx.drawImage(img,(img.width-cw)/2,(img.height-ch)/2,cw,ch, sp.x-GEM_R, y-GEM_R, GEM_R*2, GEM_R*2); }
+    ctx.save(); ctx.beginPath(); ctx.arc(sp.x, sp.y, GEM_R, 0, Math.PI*2); ctx.clip();
+    if(img && img.width){ const cw=img.width*0.74, ch=img.height*0.74; ctx.drawImage(img,(img.width-cw)/2,(img.height-ch)/2,cw,ch, sp.x-GEM_R, sp.y-GEM_R, GEM_R*2, GEM_R*2); }
     else { ctx.fillStyle = gem ? gem.hex : '#cccccc'; ctx.fill(); }
     ctx.restore();
-    ctx.beginPath(); ctx.arc(sp.x, y, GEM_R*1.06, 0, Math.PI*2); ctx.strokeStyle='#eef0f2'; ctx.lineWidth=GEM_R*0.16; ctx.stroke();
-    ctx.beginPath(); ctx.arc(sp.x, y, GEM_R*1.14, 0, Math.PI*2); ctx.strokeStyle='rgba(60,62,66,0.45)'; ctx.lineWidth=1*px; ctx.stroke();
+    ctx.beginPath(); ctx.arc(sp.x, sp.y, GEM_R*1.06, 0, Math.PI*2); ctx.strokeStyle='#eef0f2'; ctx.lineWidth=GEM_R*0.16; ctx.stroke();
+    ctx.beginPath(); ctx.arc(sp.x, sp.y, GEM_R*1.14, 0, Math.PI*2); ctx.strokeStyle='rgba(60,62,66,0.45)'; ctx.lineWidth=1*px; ctx.stroke();
   });
   ctx.restore();
 }
