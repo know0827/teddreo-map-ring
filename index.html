@@ -989,8 +989,6 @@ function drawUnrolledMapBox(ctx, bx, by, bw, bh){
     if(img && img.width){ const cw=img.width*0.74, ch=img.height*0.74; ctx.drawImage(img,(img.width-cw)/2,(img.height-ch)/2,cw,ch, sp.x-GEM_R, sp.y-GEM_R, GEM_R*2, GEM_R*2); }
     else { ctx.fillStyle = gem ? gem.hex : '#cccccc'; ctx.fill(); }
     ctx.restore();
-    ctx.beginPath(); ctx.arc(sp.x, sp.y, GEM_R*1.06, 0, Math.PI*2); ctx.strokeStyle='#eef0f2'; ctx.lineWidth=GEM_R*0.16; ctx.stroke();
-    ctx.beginPath(); ctx.arc(sp.x, sp.y, GEM_R*1.14, 0, Math.PI*2); ctx.strokeStyle='rgba(60,62,66,0.45)'; ctx.lineWidth=1*px; ctx.stroke();
   });
   ctx.restore();
 }
