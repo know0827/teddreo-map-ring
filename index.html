@@ -827,10 +827,13 @@ function renderConfirm(){
     <div class="card" id="reportOrderCard" style="${ready?'':'display:none;'}">
       <h3>回報訂單</h3>
       <p class="notice">💡 小提醒：建議使用 LINE 帳號註冊登入！確認訂單後，系統會自動將您的客製化設計圖與訂單資訊同步發送至官方 LINE；隨時掌握製作進度，後續有任何設計細節想溝通也更方便快速喔！</p>
-      <div class="action-row"><button class="act" onclick="downloadDesignPhoto()">下載我的設計圖</button></div>
-      <div class="action-row"><button class="act primary" id="submitDesignBtn" onclick="submitOrLoginThenSend()">確認訂單，登入LINE並送出設計圖</button></div>
+      <div class="action-row">
+        <button class="act" onclick="downloadDesignPhoto()">下載我的設計圖</button>
+      </div>
+      <div class="action-row">
+        <button class="act primary" id="submitDesignBtn" onclick="submitOrLoginThenSend()">登入 LINE 並送出設計圖</button>
+      </div>
       ${statusHTML}
-      <div class="action-row"><button class="act" onclick="shareOrderToLine(event)">一鍵複製並前往 LINE</button></div>
     </div>
     <div class="restart"><button onclick="restartAll()">重新開始設計</button></div>`;
 }
@@ -1042,7 +1045,7 @@ async function submitDesignByLine(){
     setSubmitStatus('已成功送出設計圖與訂單資訊，我們會盡快與您聯繫，謝謝！','ok');
   }catch(err){
     console.error('submitDesignByLine failed:', err);
-    setSubmitStatus('送出時發生錯誤，請稍後再試一次，或改用下方「一鍵複製並前往 LINE」回報訂單。','error');
+    setSubmitStatus('送出時發生錯誤，請稍後再試一次，或直接聯繫官方 LINE 回報訂單。','error');
   }finally{
     btn.disabled=false; btn.textContent=orig; window.__isSubmittingDesign=false;
   }
@@ -1343,7 +1346,12 @@ function buildInnerTex(e, thc, H){
   const total = ws.reduce((a,b)=>a+b,0) + gap*Math.max(0,chars.length-1);
   let u = (thc/(Math.PI*2)) % 1; if(u<0) u+=1;
   let x = (1-u)*C*S - total/2;
-  chars.forEach((c,i)=>{ ctx.font = engraveFontOf(f*S, c, fam); ctx.fillText(c, x, H/2*S); x += ws[i] + gap; });
+  /* 文字若跨過貼圖接縫(u≈0/1),左右各補畫一份,接縫處才不會被切掉 */
+  const x00 = x;
+  [-C*S, 0, C*S].forEach(off=>{
+    let xx = x00 + off;
+    chars.forEach((c,i)=>{ ctx.font = engraveFontOf(f*S, c, fam); ctx.fillText(c, xx, H/2*S); xx += ws[i] + gap; });
+  });
   const t=new THREE.CanvasTexture(cv);
   t.wrapS=THREE.RepeatWrapping; t.repeat.x=-1;
   t.anisotropy=renderer.capabilities.getMaxAnisotropy();
