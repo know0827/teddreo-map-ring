@@ -207,6 +207,10 @@ button.act:disabled{opacity:0.6;cursor:wait;}
       <div><div class="t-name">航線</div><div class="t-desc">兩組主石之間刻兩條平行航線,各有一架小飛機(一去一回)</div></div>
       <div class="switch" id="routeSwitch" role="switch" tabindex="0" onclick="toggleRoute()"></div>
     </div>
+    <div class="toggle-row" id="mapRouteRow" style="margin-top:10px;">
+      <div><div class="t-name">設計圖展開圖顯示航線</div><div class="t-desc">下載的設計圖中,展開圖上是否畫出航線(關閉則只顯示國土輪廓與主石,方便刻印)</div></div>
+      <div class="switch" id="mapRouteSwitch" role="switch" tabindex="0" onclick="toggleMapRoute()"></div>
+    </div>
     <div class="next-step-row"><button class="next-step" onclick="goNext('place')">下一步:主石</button></div>
     </div>
   </div>
@@ -421,7 +425,7 @@ const FINISHES = [
 ];
 const finishName = ()=> FINISHES.find(f=>f.key===st.finish).name;
 const newEng = ()=>({on:false, text:'', color:'silver', font:'specialelite'});
-let st = {placeA:'TW', placeB:'US', route:true,
+let st = {placeA:'TW', placeB:'US', route:true, mapRoute:true,
   stoneCount:1, gemA1:'diamondwhite', gemA2:'royalblue', gemB1:'olivegreen', gemB2:'royalblue',
   widthTop:4, widthBot:4, finish:'matte',
   eng:{top:newEng(), bot:newEng()},
@@ -437,9 +441,12 @@ function renderPlace(){
   document.getElementById('placeASel').innerHTML = countryOptionsHTML(st.placeA);
   document.getElementById('placeBSel').innerHTML = countryOptionsHTML(st.placeB);
   document.getElementById('routeSwitch').classList.toggle('on', st.route);
+  document.getElementById('mapRouteSwitch').classList.toggle('on', st.mapRoute);
+  document.getElementById('mapRouteRow').style.display = st.route ? '' : 'none';
   drawMapPick();
 }
 function setPlace(f, k){ st[f]=k; renderPlace(); renderGemPicker(); update(true); }
+function toggleMapRoute(){ st.mapRoute=!st.mapRoute; renderPlace(); }
 function toggleRoute(){ st.route=!st.route; renderPlace(); update(false); }
 
 /* ---- 麥卡托投影(形狀不變形) ---- */
@@ -926,6 +933,7 @@ function drawUnrolledMapBox(ctx, bx, by, bw, bh){
   const vy = y => y <= D.top.y1 ? y : (y >= D.bot.y0 ? y - shift : D.top.y1);      /* 實際位置 → 連續的展開位置 */
   const yTop = D.top.y0, yBot = D.bot.y1 - shift, top0 = D.top.y0 + 0.05;
   ctx.save();
+  const outT = ctx.getTransform();
   roundRectPath(ctx,bx,by,bw,bh,10); ctx.clip();
   ctx.fillStyle='#d9dadc'; ctx.fillRect(bx,by,bw,bh);
   /* 只取兩個國家所在的橫向範圍,放到最大 */
@@ -945,15 +953,37 @@ function drawUnrolledMapBox(ctx, bx, by, bw, bh){
   ctx.fillStyle='#bdbec1'; ctx.fill(land,'evenodd');
   ctx.save(); ctx.clip(land,'evenodd'); ctx.translate(0,-1.2*px); ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=2*px; ctx.stroke(land); ctx.restore();
   ctx.strokeStyle='rgba(70,72,76,0.75)'; ctx.lineWidth=1*px; ctx.lineJoin='round'; ctx.stroke(land);
-  /* 航線與飛機 */
-  (m.routes||[]).forEach(rt=>{
-    const ink='#707378';
-    ctx.strokeStyle=ink; ctx.lineWidth=1.6*px; ctx.lineCap='round';
-    ctx.beginPath(); for(let i=0;i<=120;i++){ const [x,y]=rt.at(i/120); i?ctx.lineTo(x,vy(y)):ctx.moveTo(x,vy(y)); } ctx.stroke();
-    const [ppx,ppy]=rt.at(rt.tp); let ang=rt.tan(rt.tp); if(!rt.fwd) ang+=Math.PI;
-    ctx.fillStyle='#d9dadc'; planeShape(ctx, ppx, vy(ppy), ang, PLANE_SIZE*1.3);
-    ctx.fillStyle=ink; planeShape(ctx, ppx, vy(ppy), ang, PLANE_SIZE);
-  });
+  /* 航線與飛機:與 3D 戒指上的畫法完全相同(線條、飛機、飛機周圍留白),上下戒各自裁切後接在一起 */
+  if(st.route && st.mapRoute && (m.routes||[]).length){
+    const Q = 4, tc = document.createElement('canvas');
+    tc.width = Math.ceil(bw*Q); tc.height = Math.ceil(bh*Q);
+    const tx = tc.getContext('2d');
+    const sc = Q*k;
+    RINGS.forEach(r=>{
+      const R = D[r], dy = r==='top' ? 0 : -shift;
+      tx.save();
+      tx.setTransform(sc,0,0,sc, Q*(bw-(x1-x0)*k)/2 - x0*sc, Q*(bh-(yBot-yTop)*k)/2 - yTop*sc);
+      tx.translate(0, dy);
+      tx.beginPath(); tx.rect(x0-5, R.y0, (x1-x0)+10, R.y1-R.y0); tx.clip();
+      m.routes.forEach(rt=>{
+        const ink = '#6f7276';
+        tx.strokeStyle = ink; tx.lineWidth = 0.032; tx.lineCap='round';
+        tx.beginPath();
+        for(let i=0;i<=120;i++){ const [x,y]=rt.at(i/120); i ? tx.lineTo(x,y) : tx.moveTo(x,y); }
+        tx.stroke();
+        const [ppx,ppy] = rt.at(rt.tp);
+        let ang = rt.tan(rt.tp); if(!rt.fwd) ang += Math.PI;
+        tx.save(); tx.globalCompositeOperation='destination-out';
+        planeShape(tx, ppx, ppy, ang, PLANE_SIZE*1.25); tx.restore();
+        tx.fillStyle = ink;
+        planeShape(tx, ppx, ppy, ang, PLANE_SIZE);
+      });
+      tx.restore();
+    });
+    ctx.save(); ctx.setTransform(outT);
+    ctx.drawImage(tc, 0, 0, tc.width, tc.height, bx, by, bw, bh);
+    ctx.restore();
+  }
   /* 主石:實拍寶石照片 + 銀色邊框 */
   m.spots.forEach(sp=>{
     const gem = GEMS.find(g=>g.key===st[sp.slot]), y = vy(sp.y);
